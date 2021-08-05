@@ -20,6 +20,14 @@ def scale_contour(contour, scale):
     contour = contour + mid
     return contour
 
+def unwarp(img, src, dst, testing):
+    h, w = img.shape[:2]
+    # use cv2.getPerspectiveTransform() to get M, the transform matrix, and Minv, the inverse
+    M = cv.getPerspectiveTransform(src, dst)
+    # use cv2.warpPerspective() to warp your image to a top-down view
+    warped = cv.warpPerspective(img, M, (w, h), flags=cv.INTER_LINEAR)
+    return warped, M
+
 SubwayTop = cv.imread(args.file)
 
 cv.namedWindow("HSV")
@@ -42,8 +50,8 @@ while True:
     LowerBound = np.array([LowH, LowS, LowV])
     UpperBound = np.array([HighH, HighS, HighV])
 
-    #LowerBound = np.array([0, 127, 0])
-    #UpperBound = np.array([255, 255, 255])
+    LowerBound = np.array([0, 127, 0])
+    UpperBound = np.array([255, 255, 255])
 
     SubwayTopGrey = cv.cvtColor(SubwayTop, cv.COLOR_BGR2GRAY)
     SubwayTopHSV = cv.cvtColor(SubwayTop, cv.COLOR_BGR2HSV)
@@ -57,9 +65,8 @@ while True:
         break
 
     if key == ord('a'):
-        result = SubwayTop.copy()
+        ContourImage = SubwayTop.copy()
         contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-        print(result)
 
         MaxContourArea = 0
         idx = 0
@@ -71,11 +78,19 @@ while True:
                 rect = cv.minAreaRect(contour)
                 bbox = np.int0(cv.boxPoints(rect))
 
-        cv.drawContours(result,[bbox],0,(255,255,255),-1)
-        out = np.zeros_like(SubwayTop)
-        out[mask == 255] = SubwayTop[mask == 255]
-        cv.imshow("out", out)
-        cv.imshow("result", result)
+        cv.drawContours(ContourImage,[bbox],0,(255,255,255),-1)
+        cv.imshow("Contour Image", ContourImage)
+
+        bbox = np.float32(bbox)
+        dst = np.float32([[0,0], [1000,0], [0,492], [1000,492]])
+        
+
+        # Masked Image
+        #out = np.zeros_like(SubwayTop)s
+        #out[mask == 255] = SubwayTop[mask == 255]
+        #cv.imshow("out", out)
+
+
 
 
 
