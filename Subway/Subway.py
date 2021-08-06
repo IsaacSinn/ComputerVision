@@ -2,10 +2,14 @@ import cv2 as cv
 import numpy as np
 import argparse
 from position import position
+import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--file", type = str, required = True)
 args = parser.parse_args()
+
+SubwayTop = cv.imread(args.file)
+h, w = SubwayTop.shape[:2]
 
 def nothing(x):
     pass
@@ -20,23 +24,21 @@ def scale_contour(contour, scale):
     contour = contour + mid
     return contour
 
-def unwarp(img, src, dst, testing):
-    h, w = img.shape[:2]
+def unwarp(img, src, dst):
     # use cv2.getPerspectiveTransform() to get M, the transform matrix, and Minv, the inverse
     M = cv.getPerspectiveTransform(src, dst)
     # use cv2.warpPerspective() to warp your image to a top-down view
     warped = cv.warpPerspective(img, M, (w, h), flags=cv.INTER_LINEAR)
     return warped, M
 
-SubwayTop = cv.imread(args.file)
+trackbar = {
+            "HSV": ["LowH", "LowS", "LowV", "HighH", "HighS", "HighV"],
+}
 
-cv.namedWindow("HSV")
-cv.createTrackbar("LowH", "HSV", 0, 255, nothing)
-cv.createTrackbar("LowS", "HSV", 0, 255, nothing)
-cv.createTrackbar("LowV", "HSV", 0, 255, nothing)
-cv.createTrackbar("HighH", "HSV", 0, 255, nothing)
-cv.createTrackbar("HighS", "HSV", 0, 255, nothing)
-cv.createTrackbar("HighV", "HSV", 0, 255, nothing)
+for window in trackbar.keys():
+    cv.namedWindow(window)
+    for name in trackbar[window]:
+        cv.createTrackbar(name, window, 0, 255, nothing)
 
 while True:
 
@@ -47,8 +49,8 @@ while True:
     HighS = cv.getTrackbarPos("HighS", "HSV")
     HighV = cv.getTrackbarPos("HighV", "HSV")
 
-    LowerBound = np.array([LowH, LowS, LowV])
-    UpperBound = np.array([HighH, HighS, HighV])
+    #LowerBound = np.array([LowH, LowS, LowV])
+    #UpperBound = np.array([HighH, HighS, HighV])
 
     LowerBound = np.array([0, 127, 0])
     UpperBound = np.array([255, 255, 255])
@@ -57,6 +59,7 @@ while True:
     SubwayTopHSV = cv.cvtColor(SubwayTop, cv.COLOR_BGR2HSV)
     SubwayTopBlur = cv.blur(SubwayTopGrey, (3,3))
 
+    # Mask of Subway
     mask = cv.inRange(SubwayTop, LowerBound, UpperBound)
     cv.imshow("mask", mask)
 
@@ -65,6 +68,7 @@ while True:
         break
 
     if key == ord('a'):
+        # Contour of Subway
         ContourImage = SubwayTop.copy()
         contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
@@ -74,19 +78,24 @@ while True:
             if cv.contourArea(contour) >= MaxContourArea:
                 MaxContourArea = cv.contourArea(contour)
                 idx = i
-                contour = scale_contour(contour, 0.97)
+                contour = scale_contour(contour, 0.95)
                 rect = cv.minAreaRect(contour)
                 bbox = np.int0(cv.boxPoints(rect))
 
-        cv.drawContours(ContourImage,[bbox],0,(255,255,255),-1)
-        cv.imshow("Contour Image", ContourImage)
+        cv.drawContours(ContourImage,[bbox],0,(0,0,255),3)
+        ContourPlot = plt.imshow(ContourImage)
 
+        # Perspective Fix Image
         bbox = np.float32(bbox)
-        dst = np.float32([[0,0], [1000,0], [0,492], [1000,492]])
-        
+        dst = np.float32([[0,0], [w,0], [w,h], [0,h]])
 
-        # Masked Image
-        #out = np.zeros_like(SubwayTop)s
+        warped, M = unwarp(SubwayTop, bbox, dst)
+        cv.imshow("warped", warped)
+        plt.show()
+
+
+        # Show Masked Image
+        #out = np.zeros_like(SubwayTop)
         #out[mask == 255] = SubwayTop[mask == 255]
         #cv.imshow("out", out)
 
