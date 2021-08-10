@@ -3,18 +3,31 @@ import numpy as np
 import argparse
 import matplotlib.pyplot as plt
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--folder", type = str, required = True)
-parser.add_argument("--test", type = bool, required = True)
+parser.add_argument("--test", type = str2bool, required = False, default = False)
 args = parser.parse_args()
 
 # Constants
 faces = [None for i in range(5)]
 for i in range(5):
-    faces[i] = cv.imread(f"{args.folder}\{i+1}.png") # Back slash between
+    faces[i] = cv.imread(f".\{i+1}.png") # Back slash between
 
 LowerBoundSubway = np.array([0, 127, 0])
 UpperBoundSubway = np.array([255, 255, 255])
+
+window_width = 900
+window_height = 850
 
 trackbar = {
             "HSV": ["LowH", "LowS", "LowV", "HighH", "HighS", "HighV"],
@@ -34,10 +47,8 @@ def scale_contour(contour, scale):
     contour = contour + mid
     return contour
 
-def unwarp(img, src, dst):
-    # use cv2.getPerspectiveTransform() to get M, the transform matrix, and Minv, the inverse
+def unwarp(img, src, dst, w, h):
     M = cv.getPerspectiveTransform(src, dst)
-    # use cv2.warpPerspective() to warp your image to a top-down view
     warped = cv.warpPerspective(img, M, (w, h), flags=cv.INTER_LINEAR)
     return warped, M
 
@@ -52,7 +63,7 @@ def identify(idx):
     for i, contour in enumerate(contours):
         if cv.contourArea(contour) >= MaxContourArea:
             MaxContourArea = cv.contourArea(contour)
-            #contour = scale_contour(contour, 0.95)
+            contour = scale_contour(contour, 0.95)
             contour = cv.minAreaRect(contour)
             bbox = np.int0(cv.boxPoints(contour))
 
@@ -63,7 +74,7 @@ def identify(idx):
     bbox = np.float32(bbox)
     dst = np.float32([[0,0], [w,0], [w,h], [0,h]])
 
-    warped, M = unwarp(faces[idx], bbox, dst)
+    warped, _ = unwarp(faces[idx], bbox, dst, w, h)
     cv.imshow("warped", warped)
 
     # Show Masked Image
@@ -74,9 +85,13 @@ def identify(idx):
 # Create track bar
 if args.test:
     for window in trackbar.keys():
-        cv.namedWindow(window)
+        cv.namedWindow(window, cv.WINDOW_NORMAL)
+        cv.resizeWindow(window, window_width, window_height)
         for name in trackbar[window]:
-            cv.createTrackbar(name, window, 0, 255, nothing)
+            limit = 255
+            if name == "HighH" or name == "LowH":
+                limit = 180
+            cv.createTrackbar(name, window, 0, limit, nothing)
 
     while True:
 
@@ -87,20 +102,24 @@ if args.test:
         HighS = cv.getTrackbarPos("HighS", "HSV")
         HighV = cv.getTrackbarPos("HighV", "HSV")
 
-        LowerBound = np.array([LowH, LowS, LowV])
-        UpperBound = np.array([HighH, HighS, HighV])
+        LowerBoundSubway = np.array([LowH, LowS, LowV])
+        UpperBoundSubway = np.array([HighH, HighS, HighV])
 
         # Mask of Subway
-        mask = cv.inRange(faces[1], LowerBound, UpperBound)
-        cv.imshow("mask", mask)
+        hsv = cv.cvtColor(faces[0], cv.COLOR_BGR2HSV)
+        mask = cv.inRange(hsv, LowerBoundSubway, UpperBoundSubway)
+        cv.imshow("HSV", mask)
 
         key = cv.waitKey(1) & 0xFF
         if key == ord('q'):
             break
 
         if key == ord('a'):
-            identify(faces[1])
-
+            identify(0)
+else:
+    mask = cv.inRange(faces[0], LowerBoundSubway, UpperBoundSubway)
+    cv.imshow("mask", mask)
+    identify(0)
 
 
 
