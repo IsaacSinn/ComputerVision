@@ -64,11 +64,24 @@ def unwarp(img, src, dst, w, h):
     warped = cv.warpPerspective(img, M, (w, h), flags=cv.INTER_LINEAR)
     return warped, M
 
+def check_boundaries(value, tolerance, boundary, upper_or_lower):
+    if(value + tolerance > boundary):
+        value = boundary
+    elif (value - tolerance < 0):
+        value = 0
+    else:
+        if upper_or_lower == 1:
+            value = value + tolerance
+        else:
+            value = value - tolerance
+    return value
+
 def crop_contour(idx):
     h, w = faces[idx].shape[:2]
     # Contour of Subway
     ContourImage = faces[idx].copy()
     mask = cv.inRange(hsv[idx], LowerBoundSubway, UpperBoundSubway)
+    cv.imshow("mask", mask)
     contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
     MaxContourArea = 0
@@ -119,7 +132,7 @@ def crop_contour(idx):
 
         tape_mask = np.zeros(warped.shape[:2], np.uint8)
         cv.drawContours(tape_mask, [tape_bbox], 0, (255,255,255), -1)
-        tape_mean = cv.mean(warped, mask = tape_mask)[:3]
+        tape_mean = cv.mean(warped_hsv, mask = tape_mask)[:3]
 
         mid = centroid(tape_contour)
         centroid_X.append(mid[0])
@@ -128,11 +141,16 @@ def crop_contour(idx):
         no_color += 1
 
 
+    # n, e, s, w
     if no_color == 4:
-        tapes[""]centroid_X.index(max(centroid_X))
-
-
-
+        tapes["e"] = tape_color[centroid_X.index(max(centroid_X))]
+        tapes["w"] = tape_color[centroid_X.index(min(centroid_X))]
+        tapes["s"] = tape_color[centroid_Y.index(max(centroid_Y))]
+        tapes["n"] = tape_color[centroid_Y.index(min(centroid_Y))]
+        return tapes, warped, no_color
+    else:
+        tapes["n"] = tape_color[centroid_Y.index(min(centroid_Y))]
+        return tapes, warped, no_color
 
 
 # Create track bar
@@ -165,15 +183,19 @@ if args.test:
         key = cv.waitKey(1) & 0xFF
         if key == ord('q'):
             break
-
-        if key == ord('a'):
-            crop_contour(0)
 else:
     while True:
+        tapes = [None for i in range(5)]
+        warped = [None for i in range(5)]
+        no_color = [None for i in range(5)]
+        idx = None
+        for i in range(5):
+            tapes[i], warped[i], no_color[i] = crop_contour(i)
+            if no_color[i] = 4:
+                idx = i
 
-        mask = cv.inRange(hsv[1], LowerBoundSubway, UpperBoundSubway)
-        cv.imshow("mask", mask)
-        crop_contour(0)
+        for tape_color in tapes[idx].values():
+
 
         key = cv.waitKey(1) & 0xFF
         if key == ord('q'):
