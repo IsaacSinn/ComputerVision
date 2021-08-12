@@ -20,14 +20,18 @@ args = parser.parse_args()
 
 # Constants
 faces = [None for i in range(5)]
+hsv = [None for i in range(5)]
 for i in range(5):
-    faces[i] = cv.imread(f".\{i+1}.png") # Back slash between
+    faces[i] = cv.imread(f"{args.folder}\{i+1}.png") # Back slash between
+    hsv[i] = cv.cvtColor(faces[i], cv.COLOR_BGR2HSV)
 
-LowerBoundSubway = np.array([0, 127, 0])
-UpperBoundSubway = np.array([255, 255, 255])
+LowerBoundSubway = np.array([60, 0, 0])
+UpperBoundSubway = np.array([115, 75, 255])
 
 window_width = 900
 window_height = 850
+
+kernel = np.ones((10,10), np.uint8)
 
 trackbar = {
             "HSV": ["LowH", "LowS", "LowV", "HighH", "HighS", "HighV"],
@@ -37,50 +41,99 @@ trackbar = {
 def nothing(x):
     pass
 
-def scale_contour(contour, scale):
+def centroid(contour):
     moments = cv.moments(contour)
     midX = int(round(moments["m10"] / moments["m00"]))
     midY = int(round(moments["m01"] / moments["m00"]))
     mid = np.array([midX, midY])
-    contour = contour - mid
-    contour = (contour * scale).astype(np.int32)
-    contour = contour + mid
-    return contour
+    return mid
+
+def scale_contour(contour, scale):
+    moments = cv.moments(contour)
+    if moments["m00"] == 0:
+        pass
+    else:
+        mid = centroid(contour)
+        contour = contour - mid
+        contour = (contour * scale).astype(np.int32)
+        contour = contour + mid
+        return contour
 
 def unwarp(img, src, dst, w, h):
     M = cv.getPerspectiveTransform(src, dst)
     warped = cv.warpPerspective(img, M, (w, h), flags=cv.INTER_LINEAR)
     return warped, M
 
-# identify color and amount
-def identify(idx):
+def crop_contour(idx):
     h, w = faces[idx].shape[:2]
     # Contour of Subway
     ContourImage = faces[idx].copy()
+    mask = cv.inRange(hsv[idx], LowerBoundSubway, UpperBoundSubway)
     contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
     MaxContourArea = 0
     for i, contour in enumerate(contours):
         if cv.contourArea(contour) >= MaxContourArea:
             MaxContourArea = cv.contourArea(contour)
-            contour = scale_contour(contour, 0.95)
-            contour = cv.minAreaRect(contour)
-            bbox = np.int0(cv.boxPoints(contour))
+    try:
+        contour = scale_contour(contour, 0.95)
+        contour = cv.minAreaRect(contour)
+        bbox = np.int0(cv.boxPoints(contour))
+    except:
+        print("No Contour Found")
 
     cv.drawContours(ContourImage,[bbox],0,(0,0,255),3)
     cv.imshow("Contour Image", ContourImage)
 
     # Perspective Fix Image
     bbox = np.float32(bbox)
-    dst = np.float32([[0,0], [w,0], [w,h], [0,h]])
-
+    if bbox[0][1] > bbox[2][1]:
+        dst = np.float32([[0,h], [0,0], [w,0], [w,h]])
+    else:
+        dst = np.float32([[0,0], [w,0], [w,h], [0,h]])
     warped, _ = unwarp(faces[idx], bbox, dst, w, h)
     cv.imshow("warped", warped)
 
-    # Show Masked Image
-    #out = np.zeros_like(faces[idx])
-    #out[mask == 255] = faces[idx][mask == 255]
-    #cv.imshow("out", out)
+    # Mask of tape
+    warped_hsv = cv.cvtColor(warped, cv.COLOR_BGR2HSV)
+    warped_mask = cv.inRange(warped_hsv, LowerBoundSubway, UpperBoundSubway)
+    warped_mask = cv.morphologyEx(warped_mask, cv.MORPH_CLOSE, kernel)
+    warped_mask_inv = cv.bitwise_not(warped_mask)
+    cv.imshow("warped_mask", warped_mask_inv)
+
+    # Show Masked Image of tape
+    masked_image = cv.bitwise_and(warped, warped, mask = warped_mask_inv)
+    #cv.imshow("masked_image", masked_image)
+
+    # Select colors of tape
+    tapes = {}
+    centroid_X = []
+    centroid_Y = []
+    tape_color = []
+    no_color = 0
+    tape_contours, _ = cv.findContours(warped_mask_inv, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    for i, tape_contour in enumerate(tape_contours):
+        tape_contour = scale_contour(tape_contour, 0.95)
+        tape_contour_min = cv.minAreaRect(tape_contour)
+        tape_bbox = np.int0(cv.boxPoints(tape_contour_min))
+
+        tape_mask = np.zeros(warped.shape[:2], np.uint8)
+        cv.drawContours(tape_mask, [tape_bbox], 0, (255,255,255), -1)
+        tape_mean = cv.mean(warped, mask = tape_mask)[:3]
+
+        mid = centroid(tape_contour)
+        centroid_X.append(mid[0])
+        centroid_Y.append(mid[1])
+        tape_color.append(tape_mean)
+        no_color += 1
+
+
+    if no_color == 4:
+        tapes[""]centroid_X.index(max(centroid_X))
+
+
+
+
 
 # Create track bar
 if args.test:
@@ -106,8 +159,7 @@ if args.test:
         UpperBoundSubway = np.array([HighH, HighS, HighV])
 
         # Mask of Subway
-        hsv = cv.cvtColor(faces[0], cv.COLOR_BGR2HSV)
-        mask = cv.inRange(hsv, LowerBoundSubway, UpperBoundSubway)
+        mask = cv.inRange(hsv[0], LowerBoundSubway, UpperBoundSubway)
         cv.imshow("HSV", mask)
 
         key = cv.waitKey(1) & 0xFF
@@ -115,11 +167,17 @@ if args.test:
             break
 
         if key == ord('a'):
-            identify(0)
+            crop_contour(0)
 else:
-    mask = cv.inRange(faces[0], LowerBoundSubway, UpperBoundSubway)
-    cv.imshow("mask", mask)
-    identify(0)
+    while True:
+
+        mask = cv.inRange(hsv[1], LowerBoundSubway, UpperBoundSubway)
+        cv.imshow("mask", mask)
+        crop_contour(0)
+
+        key = cv.waitKey(1) & 0xFF
+        if key == ord('q'):
+            break
 
 
 
