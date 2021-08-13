@@ -81,7 +81,7 @@ def crop_contour(idx):
     # Contour of Subway
     ContourImage = faces[idx].copy()
     mask = cv.inRange(hsv[idx], LowerBoundSubway, UpperBoundSubway)
-    cv.imshow("mask", mask)
+    #cv.imshow("mask", mask)
     contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
     MaxContourArea = 0
@@ -96,7 +96,7 @@ def crop_contour(idx):
         print("No Contour Found")
 
     cv.drawContours(ContourImage,[bbox],0,(0,0,255),3)
-    cv.imshow("Contour Image", ContourImage)
+    #cv.imshow("Contour Image", ContourImage)
 
     # Perspective Fix Image
     bbox = np.float32(bbox)
@@ -105,14 +105,14 @@ def crop_contour(idx):
     else:
         dst = np.float32([[0,0], [w,0], [w,h], [0,h]])
     warped, _ = unwarp(faces[idx], bbox, dst, w, h)
-    cv.imshow("warped", warped)
+    #cv.imshow("warped", warped)
 
     # Mask of tape
     warped_hsv = cv.cvtColor(warped, cv.COLOR_BGR2HSV)
     warped_mask = cv.inRange(warped_hsv, LowerBoundSubway, UpperBoundSubway)
     warped_mask = cv.morphologyEx(warped_mask, cv.MORPH_CLOSE, kernel)
     warped_mask_inv = cv.bitwise_not(warped_mask)
-    cv.imshow("warped_mask", warped_mask_inv)
+    #cv.imshow("warped_mask", warped_mask_inv)
 
     # Show Masked Image of tape
     masked_image = cv.bitwise_and(warped, warped, mask = warped_mask_inv)
@@ -126,13 +126,17 @@ def crop_contour(idx):
     no_color = 0
     tape_contours, _ = cv.findContours(warped_mask_inv, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     for i, tape_contour in enumerate(tape_contours):
-        tape_contour = scale_contour(tape_contour, 0.95)
+        tape_contour = scale_contour(tape_contour, 0.85)
         tape_contour_min = cv.minAreaRect(tape_contour)
         tape_bbox = np.int0(cv.boxPoints(tape_contour_min))
 
         tape_mask = np.zeros(warped.shape[:2], np.uint8)
         cv.drawContours(tape_mask, [tape_bbox], 0, (255,255,255), -1)
         tape_mean = cv.mean(warped_hsv, mask = tape_mask)[:3]
+
+        # show tape bbox -->
+        # cv.drawContours(warped, [tape_bbox], 0, (0,0,255), 1)
+        # cv.imshow("warped", warped)
 
         mid = centroid(tape_contour)
         centroid_X.append(mid[0])
@@ -166,15 +170,15 @@ if args.test:
 
     while True:
 
-        LowH = cv.getTrackbarPos("LowH", "HSV")
-        LowS = cv.getTrackbarPos("LowS", "HSV")
-        LowV = cv.getTrackbarPos("LowV", "HSV")
-        HighH = cv.getTrackbarPos("HighH", "HSV")
-        HighS = cv.getTrackbarPos("HighS", "HSV")
-        HighV = cv.getTrackbarPos("HighV", "HSV")
-
-        LowerBoundSubway = np.array([LowH, LowS, LowV])
-        UpperBoundSubway = np.array([HighH, HighS, HighV])
+        # LowH = cv.getTrackbarPos("LowH", "HSV")
+        # LowS = cv.getTrackbarPos("LowS", "HSV")
+        # LowV = cv.getTrackbarPos("LowV", "HSV")
+        # HighH = cv.getTrackbarPos("HighH", "HSV")
+        # HighS = cv.getTrackbarPos("HighS", "HSV")
+        # HighV = cv.getTrackbarPos("HighV", "HSV")
+        #
+        # LowerBoundSubway = np.array([LowH, LowS, LowV])
+        # UpperBoundSubway = np.array([HighH, HighS, HighV])
 
         # Mask of Subway
         mask = cv.inRange(hsv[0], LowerBoundSubway, UpperBoundSubway)
@@ -183,23 +187,63 @@ if args.test:
         key = cv.waitKey(1) & 0xFF
         if key == ord('q'):
             break
+        if key == ord('a'):
+            tape, warped, no_color = crop_contour(3)
+            for tape_color in tape.values():
+                LowH = check_boundaries(tape_color[0], 20, 180, 0)
+                LowS = check_boundaries(tape_color[1], 10, 255, 0)
+                LowV = check_boundaries(tape_color[2], 10, 255, 0)
+                HighH = check_boundaries(tape_color[0], 20, 180, 1)
+                HighS = check_boundaries(tape_color[1], 10, 255, 1)
+                HighV = check_boundaries(tape_color[2], 10, 255, 1)
+
+                lower_bound_tape = (LowH, LowS, LowV)
+                upper_bound_tape = (HighH, HighS, HighV)
+
+                # Visualize color patches of subway top -->
+                tape_color_patch = np.ones(shape = (500,500,3), dtype = np.uint8)*np.uint8(tape_color)
+                tape_color_patch = cv.cvtColor(tape_color_patch, cv.COLOR_HSV2BGR)
+                cv.imshow(f"{tape}", tape_color_patch)
+
+
 else:
-    while True:
-        tapes = [None for i in range(5)]
-        warped = [None for i in range(5)]
-        no_color = [None for i in range(5)]
-        idx = None
-        for i in range(5):
-            tapes[i], warped[i], no_color[i] = crop_contour(i)
-            if no_color[i] = 4:
-                idx = i
+    tapes = [None for i in range(5)]
+    warped = [None for i in range(5)]
+    no_color = [None for i in range(5)]
+    idx = None
+    for i in range(5):
+        tapes[i], warped[i], no_color[i] = crop_contour(i)
+        if no_color[i] == 4:
+            idx = i
 
-        for tape_color in tapes[idx].values():
+    tapes[0], warped[0], no_color[0] = crop_contour(0)
 
+    for tape_color in tapes[0].values():
+        LowH = check_boundaries(tape_color[0], 20, 180, 0)
+        LowS = check_boundaries(tape_color[1], 10, 255, 0)
+        LowV = check_boundaries(tape_color[2], 10, 255, 0)
+        HighH = check_boundaries(tape_color[0], 20, 180, 1)
+        HighS = check_boundaries(tape_color[1], 10, 255, 1)
+        HighV = check_boundaries(tape_color[2], 10, 255, 1)
 
-        key = cv.waitKey(1) & 0xFF
-        if key == ord('q'):
-            break
+        lower_bound_tape = (LowH, LowS, LowV)
+        upper_bound_tape = (HighH, HighS, HighV)
+
+        # Visualize color patches of subway top -->
+        tape_color_patch = np.ones(shape = (500,500,3), dtype = np.uint8)*np.uint8(tape_color)
+        tape_color_patch = cv.cvtColor(tape_color_patch, cv.COLOR_HSV2BGR)
+        cv.imshow(f"{tape_color}", tape_color_patch)
+
+        for i, tape in enumerate(tapes):
+            if i == idx:
+                pass
+            else:
+                print(cv.inRange(tape["n"], lower_bound_tape, upper_bound_tape))
+
+        while True:
+            key = cv.waitKey(1) & 0xFF
+            if key == ord('q'):
+                break
 
 
 
