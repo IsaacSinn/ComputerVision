@@ -2,6 +2,8 @@ import cv2 as cv
 import numpy as np
 import argparse
 import matplotlib.pyplot as plt
+import imutils
+import sys
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -17,6 +19,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--folder", type = str, required = True)
 parser.add_argument("--test", type = str2bool, required = False, default = False)
 args = parser.parse_args()
+np.set_printoptions(threshold = sys.maxsize)
 
 # Constants
 faces = [None for i in range(5)]
@@ -65,9 +68,9 @@ def unwarp(img, src, dst, w, h):
     return warped, M
 
 def check_boundaries(value, tolerance, boundary, upper_or_lower):
-    if(value + tolerance > boundary):
+    if(value + tolerance > boundary) and upper_or_lower == 1:
         value = boundary
-    elif (value - tolerance < 0):
+    elif (value - tolerance < 0) and upper_or_lower == 0:
         value = 0
     else:
         if upper_or_lower == 1:
@@ -78,6 +81,10 @@ def check_boundaries(value, tolerance, boundary, upper_or_lower):
 
 def crop_contour(idx):
     h, w = faces[idx].shape[:2]
+    if w > h*1.2:
+        w, h = 1000, 500
+    else:
+        w, h = 500, 500
     # Contour of Subway
     ContourImage = faces[idx].copy()
     mask = cv.inRange(hsv[idx], LowerBoundSubway, UpperBoundSubway)
@@ -132,7 +139,8 @@ def crop_contour(idx):
 
         tape_mask = np.zeros(warped.shape[:2], np.uint8)
         cv.drawContours(tape_mask, [tape_bbox], 0, (255,255,255), -1)
-        tape_mean = cv.mean(warped_hsv, mask = tape_mask)[:3]
+        tape_mean = list(map(int, cv.mean(warped_hsv, mask = tape_mask)[:3]))
+        tape_mean = np.asarray(tape_mean)
 
         # show tape bbox -->
         # cv.drawContours(warped, [tape_bbox], 0, (0,0,255), 1)
@@ -197,13 +205,13 @@ if args.test:
                 HighS = check_boundaries(tape_color[1], 10, 255, 1)
                 HighV = check_boundaries(tape_color[2], 10, 255, 1)
 
-                lower_bound_tape = (LowH, LowS, LowV)
-                upper_bound_tape = (HighH, HighS, HighV)
+                lower_bound_tape = np.array([LowH, LowS, LowV])
+                upper_bound_tape = np.array([HighH, HighS, HighV])
 
                 # Visualize color patches of subway top -->
-                tape_color_patch = np.ones(shape = (500,500,3), dtype = np.uint8)*np.uint8(tape_color)
-                tape_color_patch = cv.cvtColor(tape_color_patch, cv.COLOR_HSV2BGR)
-                cv.imshow(f"{tape}", tape_color_patch)
+                # tape_color_patch = np.ones(shape = (500,500,3), dtype = np.uint8)*np.uint8(tape_color)
+                # tape_color_patch = cv.cvtColor(tape_color_patch, cv.COLOR_HSV2BGR)
+                # cv.imshow(f"{tape}", tape_color_patch)
 
 
 else:
@@ -216,9 +224,12 @@ else:
         if no_color[i] == 4:
             idx = i
 
-    tapes[0], warped[0], no_color[0] = crop_contour(0)
+    output = np.zeros((1500,2000,3), dtype = np.uint8)
+    output[500:1000, 500:1500,:] = warped[idx]
 
-    for tape_color in tapes[0].values():
+    for tape_position in tapes[idx].keys():
+        tape_color = tapes[idx][tape_position]
+
         LowH = check_boundaries(tape_color[0], 20, 180, 0)
         LowS = check_boundaries(tape_color[1], 10, 255, 0)
         LowV = check_boundaries(tape_color[2], 10, 255, 0)
@@ -226,25 +237,36 @@ else:
         HighS = check_boundaries(tape_color[1], 10, 255, 1)
         HighV = check_boundaries(tape_color[2], 10, 255, 1)
 
-        lower_bound_tape = (LowH, LowS, LowV)
-        upper_bound_tape = (HighH, HighS, HighV)
+        lower_bound_tape = np.array([LowH, LowS, LowV])
+        upper_bound_tape = np.array([HighH, HighS, HighV])
 
         # Visualize color patches of subway top -->
-        tape_color_patch = np.ones(shape = (500,500,3), dtype = np.uint8)*np.uint8(tape_color)
-        tape_color_patch = cv.cvtColor(tape_color_patch, cv.COLOR_HSV2BGR)
-        cv.imshow(f"{tape_color}", tape_color_patch)
+        # tape_color_patch = np.ones(shape = (500,500,3), dtype = np.uint8)*np.uint8(tape_color)
+        # tape_color_patch = cv.cvtColor(tape_color_patch, cv.COLOR_HSV2BGR)
+        # cv.imshow(f"{tape_color}", tape_color_patch)
 
         for i, tape in enumerate(tapes):
             if i == idx:
                 pass
             else:
-                print(cv.inRange(tape["n"], lower_bound_tape, upper_bound_tape))
+                in_range = cv.inRange(tape["n"], lower_bound_tape, upper_bound_tape)
+                if in_range[0] == 255:
+                    if tape_position == "n":
+                        rotated_warp = imutils.rotate(warped[i], 180)
+                        output[0:500, 500:1500,:] = rotated_warp
+                    elif tape_position == "s":
+                        output[1000:1500, 500:1500, :] = warped[i]
+                    elif tape_position == "e":
+                        rotated_warp = imutils.rotate_bound(warped[i], -90)
+                        output[500:1000, 1500:2000, :] = rotated_warp
+                    elif tape_position == "w":
+                        rotated_warp = imutils.rotate_bound(warped[i], 90)
+                        output[500:1000, 0:500, :] = rotated_warp
+                    else:
+                        pass
 
-        while True:
-            key = cv.waitKey(1) & 0xFF
-            if key == ord('q'):
-                break
 
 
-
+output = plt.imshow(output)
+plt.show()
 cv.destroyAllWindows()
