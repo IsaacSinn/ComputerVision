@@ -25,7 +25,7 @@ np.set_printoptions(threshold = sys.maxsize)
 faces = [None for i in range(5)]
 hsv = [None for i in range(5)]
 for i in range(5):
-    faces[i] = cv.imread(f"{args.folder}\{i+1}.png") # Back slash between
+    faces[i] = cv.imread(f"{args.folder}\J{i+1}.png") # Back slash between
     hsv[i] = cv.cvtColor(faces[i], cv.COLOR_BGR2HSV)
 
 LowerBoundSubway = np.array([60, 0, 0])
@@ -230,20 +230,20 @@ else:
     for tape_position in tapes[idx].keys():
         tape_color = tapes[idx][tape_position]
 
-        LowH = check_boundaries(tape_color[0], 20, 180, 0)
-        LowS = check_boundaries(tape_color[1], 10, 255, 0)
-        LowV = check_boundaries(tape_color[2], 10, 255, 0)
-        HighH = check_boundaries(tape_color[0], 20, 180, 1)
-        HighS = check_boundaries(tape_color[1], 10, 255, 1)
-        HighV = check_boundaries(tape_color[2], 10, 255, 1)
+        LowH = check_boundaries(tape_color[0], 10, 180, 0)
+        LowS = check_boundaries(tape_color[1], 15, 255, 0)
+        LowV = check_boundaries(tape_color[2], 15, 255, 0)
+        HighH = check_boundaries(tape_color[0], 10, 180, 1)
+        HighS = check_boundaries(tape_color[1], 15, 255, 1)
+        HighV = check_boundaries(tape_color[2], 15, 255, 1)
 
         lower_bound_tape = np.array([LowH, LowS, LowV])
         upper_bound_tape = np.array([HighH, HighS, HighV])
 
         # Visualize color patches of subway top -->
-        # tape_color_patch = np.ones(shape = (500,500,3), dtype = np.uint8)*np.uint8(tape_color)
-        # tape_color_patch = cv.cvtColor(tape_color_patch, cv.COLOR_HSV2BGR)
-        # cv.imshow(f"{tape_color}", tape_color_patch)
+        tape_color_patch = np.ones(shape = (500,500,3), dtype = np.uint8)*np.uint8(tape_color)
+        tape_color_patch = cv.cvtColor(tape_color_patch, cv.COLOR_HSV2BGR)
+        cv.imshow(f"{tape_color}", tape_color_patch)
 
         for i, tape in enumerate(tapes):
             if i == idx:
